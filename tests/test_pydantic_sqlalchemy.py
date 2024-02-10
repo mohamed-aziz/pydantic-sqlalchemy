@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 from typing import List
 
+from pydantic import ConfigDict
+from pydantic.alias_generators import to_camel
+
 from pydantic_sqlalchemy import sqlalchemy_to_pydantic
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -100,43 +103,66 @@ def test_schema() -> None:
     PydanticUser = sqlalchemy_to_pydantic(User)
     PydanticAddress = sqlalchemy_to_pydantic(Address)
     assert PydanticUser.schema() == {
-        "title": "User",
-        "type": "object",
         "properties": {
             "id": {"title": "Id", "type": "integer"},
-            "name": {"title": "Name", "type": "string"},
-            "fullname": {"title": "Fullname", "type": "string"},
-            "nickname": {"title": "Nickname", "type": "string"},
-            "created": {"title": "Created", "type": "string", "format": "date-time"},
-            "updated": {"title": "Updated", "type": "string", "format": "date-time"},
+            "name": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+                "title": "Name",
+            },
+            "fullname": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+                "title": "Fullname",
+            },
+            "nickname": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+                "title": "Nickname",
+            },
+            "created": {
+                "default": None,
+                "format": "date-time",
+                "title": "Created",
+                "type": "string",
+            },
+            "updated": {
+                "default": None,
+                "format": "date-time",
+                "title": "Updated",
+                "type": "string",
+            },
         },
         "required": ["id"],
+        "title": "User",
+        "type": "object",
     }
     assert PydanticAddress.schema() == {
-        "title": "Address",
-        "type": "object",
         "properties": {
             "id": {"title": "Id", "type": "integer"},
             "email_address": {"title": "Email Address", "type": "string"},
-            "user_id": {"title": "User Id", "type": "integer"},
+            "user_id": {
+                "anyOf": [{"type": "integer"}, {"type": "null"}],
+                "default": None,
+                "title": "User Id",
+            },
         },
         "required": ["id", "email_address"],
+        "title": "Address",
+        "type": "object",
     }
 
 
 def test_config() -> None:
-    class Config:
-        orm_mode = True
-        allow_population_by_field_name = True
-
-        @classmethod
-        def alias_generator(cls, string: str) -> str:
-            pascal_case = "".join(word.capitalize() for word in string.split("_"))
-            camel_case = pascal_case[0].lower() + pascal_case[1:]
-            return camel_case
-
     PydanticUser = sqlalchemy_to_pydantic(User)
-    PydanticAddress = sqlalchemy_to_pydantic(Address, config=Config)
+    PydanticAddress = sqlalchemy_to_pydantic(
+        Address,
+        config=ConfigDict(
+            from_attributes=True,
+            alias_generator=to_camel,
+            populate_by_name=True,
+        ),
+    )
 
     class PydanticUserWithAddresses(PydanticUser):
         addresses: List[PydanticAddress] = []

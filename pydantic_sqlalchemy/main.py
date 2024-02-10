@@ -1,17 +1,19 @@
 from typing import Container, Optional, Type
 
-from pydantic import BaseConfig, BaseModel, create_model
+from pydantic import BaseConfig, BaseModel, create_model, ConfigDict
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm.properties import ColumnProperty
 
 
-class OrmConfig(BaseConfig):
-    orm_mode = True
-
-
 def sqlalchemy_to_pydantic(
-    db_model: Type, *, config: Type = OrmConfig, exclude: Container[str] = []
+    db_model: Type, *, config=None, exclude=None
 ) -> Type[BaseModel]:
+    if exclude is None:
+        exclude = []
+
+    if config is None:
+        config = ConfigDict(from_attributes=True)
+
     mapper = inspect(db_model)
     fields = {}
     for attr in mapper.attrs:
@@ -29,8 +31,12 @@ def sqlalchemy_to_pydantic(
                     python_type = column.type.python_type
                 assert python_type, f"Could not infer python_type for {column}"
                 default = None
-                if column.default is None and not column.nullable:
-                    default = ...
+                if column.default is None:
+                    if column.nullable:
+                        default = None
+                        python_type = Optional[python_type]
+                    else:
+                        default = ...
                 fields[name] = (python_type, default)
     pydantic_model = create_model(
         db_model.__name__, __config__=config, **fields  # type: ignore
